@@ -9,7 +9,6 @@ const fs = require('fs');
 const util = require('util');
 
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
-// const config = { user: 'user', pass: 'pass', port: 3333}
 const url = 'nav.community'
 const app = express();
 
@@ -41,7 +40,7 @@ app.post('/', async function (req, res) {
   }
 
   try {
-    prevaddress = await checkGoogleDNS(name)
+    prevaddress = await checkDNS(name)
   } catch (err) {
     return res.status(500).json({ error: 'Could not reach DNS server. Try again later.', name, address, addressSig, prevaddress, prevaddressSig });
   }
@@ -87,30 +86,26 @@ app.post('/', async function (req, res) {
 
 });
 
-
-const checkGoogleDNS = async (name) => {
+const checkDNS = async (name) => {
   return new Promise(async function(resolve, reject) {
     try {
-      const randomPadding = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
-      const dnsResponse = await rp(`https://dns.google.com/resolve?name=${name}.${url}&type=16&cd=0&edns_client_subnet=0.0.0.0/0&random_padding=${randomPadding}`)
-      const json = JSON.parse(dnsResponse)
+      const response = await rp({
+        uri: util.format(config.url, `${name}.nav.community`, "txt"),
+        method: "GET", headers: { "Authorization": auth },
+      })
 
-      // Get the previous address from DNS
-      if (json.Status === 0) {
-        if (Array.isArray(json.Answer)) {
-          for (var i = 0; i < json.Answer.length; i++ ) {
-            const oaAddr = json.Answer[i].data
-            if (oaAddr.includes('oa1:nav')) {
-              // Found a previous address. Use this to check signature
-              resolve(oaAddr.substring(oaAddr.indexOf('recipient_address=') + 18, oaAddr.indexOf(';')))
-            }
-          }
+      const json = JSON.parse(response)
+
+      if (json.length > 0) {
+        const oaAddr = json[0].value.split("oa1:nav recipient_address=")[1].split(";")[0];
+        if (oaAddr) {
+          resolve(orAddr)
         }
       }
 
       resolve('')
     } catch (err) {
-      reject()
+      reject(err)
     }
   })
 }
